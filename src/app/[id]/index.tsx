@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInventoryItem, useDeleteItem } from '@/api/inventory';
 import { AppColors } from '@/constants/colors';
+import { APP_STRINGS } from '@/constants/strings';
 import { NavHeader } from '@/components/ui/NavHeader';
 import { StockBadge } from '@/components/ui/StockBadge';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -23,33 +24,40 @@ export default function ItemDetailScreen() {
   const deleteMutation = useDeleteItem();
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Item',
-      'This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMutation.mutateAsync(id as string);
-              goBack();
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : 'Failed to delete item.';
-              Alert.alert('Error', message);
-            }
-          },
-        },
-      ]
-    );
+  const handleDelete = async () => {
+    const confirmed =
+      Platform.OS === 'web'
+        ? true
+        : await new Promise<boolean>((resolve) =>
+          Alert.alert(
+            APP_STRINGS.itemDetail.deleteAlertTitle,
+            APP_STRINGS.itemDetail.deleteAlertMessage,
+            [
+              { text: APP_STRINGS.itemDetail.deleteAlertCancel, style: 'cancel', onPress: () => resolve(false) },
+              { text: APP_STRINGS.itemDetail.deleteAlertConfirm, style: 'destructive', onPress: () => resolve(true) },
+            ]
+          )
+        );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteMutation.mutateAsync(id as string);
+      goBack();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : APP_STRINGS.itemDetail.deleteErrorDefault;
+      if (Platform.OS === 'web') {
+        window.alert(`${APP_STRINGS.itemDetail.errorTitle}: ${message}`);
+      } else {
+        Alert.alert(APP_STRINGS.itemDetail.errorTitle, message);
+      }
+    }
   };
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <NavHeader title="PRODUCT" onBack={goBack} />
+        <NavHeader title={APP_STRINGS.itemDetail.screenTitle} onBack={goBack} />
         <LoadingView />
       </SafeAreaView>
     );
@@ -58,15 +66,15 @@ export default function ItemDetailScreen() {
   if (error || !item) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <NavHeader title="PRODUCT" onBack={goBack} />
-        <ErrorView message="Failed to load this item." />
+        <NavHeader title={APP_STRINGS.itemDetail.screenTitle} onBack={goBack} />
+        <ErrorView message={APP_STRINGS.itemDetail.loadErrorMessage} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <NavHeader title="PRODUCT" onBack={goBack} />
+      <NavHeader title={APP_STRINGS.itemDetail.screenTitle} onBack={goBack} />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Product image */}
@@ -97,12 +105,12 @@ export default function ItemDetailScreen() {
           {/* Stats row */}
           <View style={styles.statsRow}>
             <View style={styles.statBlock}>
-              <Text style={styles.statLabel}>QUANTITY</Text>
+              <Text style={styles.statLabel}>{APP_STRINGS.itemDetail.quantityLabel}</Text>
               <Text style={styles.statValue}>{item.quantity}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
-              <Text style={styles.statLabel}>UNIT PRICE</Text>
+              <Text style={styles.statLabel}>{APP_STRINGS.itemDetail.priceLabel}</Text>
               <Text style={styles.statValue}>${item.price.toFixed(2)}</Text>
             </View>
           </View>
@@ -111,25 +119,25 @@ export default function ItemDetailScreen() {
 
           {/* Description */}
           <View style={styles.descriptionSection}>
-            <Text style={styles.sectionLabel}>DESCRIPTION</Text>
+            <Text style={styles.sectionLabel}>{APP_STRINGS.itemDetail.descriptionLabel}</Text>
             <Text style={styles.descriptionText}>
               {isExpanded
-                ? (item.description || 'No description provided.')
+                ? (item.description || APP_STRINGS.itemDetail.noDescription)
                 : (item.description
-                    ? (item.description.length > 150
-                        ? `${item.description.slice(0, 150)}...`
-                        : item.description)
-                    : 'No description provided.')}
+                  ? (item.description.length > 150
+                    ? `${item.description.slice(0, 150)}...`
+                    : item.description)
+                  : APP_STRINGS.itemDetail.noDescription)}
             </Text>
             {item.description && item.description.length > 150 && (
               <Pressable
                 onPress={() => setIsExpanded(!isExpanded)}
                 style={({ pressed }) => [styles.readMoreButton, { opacity: pressed ? 0.6 : 1 }]}
                 accessibilityRole="button"
-                accessibilityLabel={isExpanded ? "Read less description" : "Read more description"}
+                accessibilityLabel={isExpanded ? APP_STRINGS.itemDetail.readLessAccessibility : APP_STRINGS.itemDetail.readMoreAccessibility}
               >
                 <Text style={styles.readMoreText}>
-                  {isExpanded ? 'Read Less' : 'Read More'}
+                  {isExpanded ? APP_STRINGS.itemDetail.readLess : APP_STRINGS.itemDetail.readMore}
                 </Text>
               </Pressable>
             )}
@@ -141,21 +149,21 @@ export default function ItemDetailScreen() {
           <Pressable
             style={({ pressed }) => [styles.editButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={() => router.push(`/${id}/edit`)}
-            accessibilityLabel="Edit item"
+            accessibilityLabel={APP_STRINGS.itemDetail.editAccessibility}
             accessibilityRole="button"
           >
             <Edit2 size={16} color={AppColors.text} strokeWidth={1.8} />
-            <Text style={styles.editButtonText}>EDIT ITEM</Text>
+            <Text style={styles.editButtonText}>{APP_STRINGS.itemDetail.editButton}</Text>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.deleteButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={handleDelete}
-            accessibilityLabel="Delete item"
+            accessibilityLabel={APP_STRINGS.itemDetail.deleteAccessibility}
             accessibilityRole="button"
           >
             <Trash2 size={16} color="#fff" strokeWidth={1.8} />
-            <Text style={styles.deleteButtonText}>DELETE</Text>
+            <Text style={styles.deleteButtonText}>{APP_STRINGS.itemDetail.deleteButton}</Text>
           </Pressable>
         </View>
       </ScrollView>

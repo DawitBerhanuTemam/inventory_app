@@ -7,6 +7,7 @@ import { NavHeader } from '@/components/ui/NavHeader';
 import { useCreateItem } from '@/api/inventory';
 import { uploadImage } from '@/api/upload';
 import { AppColors } from '@/constants/colors';
+import { APP_STRINGS } from '@/constants/strings';
 import type { InventoryFormValues } from '@/types/inventory';
 
 /**
@@ -29,8 +30,8 @@ export default function CreateItemScreen() {
       await createMutation.mutateAsync({ ...values, image_url: imageUrl });
       goBack();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to create item.';
-      Alert.alert('Error', message);
+      const message = error instanceof Error ? error.message : APP_STRINGS.createItem.errorDefaultMessage;
+      Alert.alert(APP_STRINGS.createItem.errorTitle, message);
     } finally {
       setIsUploading(false);
     }
@@ -38,11 +39,11 @@ export default function CreateItemScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <NavHeader title="ADD PRODUCT" onBack={goBack} />
+      <NavHeader title={APP_STRINGS.createItem.title} onBack={goBack} />
       <InventoryForm
         onSubmit={handleSubmit}
         isLoading={isUploading || createMutation.isPending}
-        submitLabel="Add Product"
+        submitLabel={APP_STRINGS.createItem.submitLabel}
       />
     </SafeAreaView>
   );

@@ -110,18 +110,35 @@ export const useUpdateItem = () => {
   });
 };
 
-/** Deletes an inventory item by ID and invalidates the inventory list cache. */
+/** Deletes an inventory item by ID (and its image from storage) and invalidates the inventory list cache. */
 export const useDeleteItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // Fetch the item first so we can clean up its image
+      const { data: item } = await supabase
+        .from('inventory')
+        .select('image_url')
+        .eq('id', id)
+        .single();
+
+      // Delete the DB row
       const { error } = await supabase.from('inventory').delete().eq('id', id);
       if (error) {
         throw new Error(error.message);
       }
+
+      // Delete the image from storage (best-effort — don't fail if missing)
+      if (item?.image_url) {
+        const fileName = item.image_url.split('/').pop();
+        if (fileName) {
+          await supabase.storage.from('inventory-images').remove([fileName]);
+        }
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: ['inventory', id] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
   });
