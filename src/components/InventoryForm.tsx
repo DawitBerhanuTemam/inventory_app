@@ -1,16 +1,36 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Image as ImageIcon } from 'lucide-react-native';
+import { Camera, Package } from 'lucide-react-native';
+
+const C = {
+  bg: '#F2F2F2',
+  card: '#FFFFFF',
+  text: '#0A0A0A',
+  sub: '#7A7A7A',
+  border: '#E5E5E5',
+  red: '#C0392B',
+  redLight: '#FCECEA',
+};
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().min(1, 'Description is required'),
-  quantity: z.number().min(0, 'Quantity cannot be negative'),
-  price: z.number().min(0, 'Price cannot be negative'),
+  quantity: z.number().min(0, 'Cannot be negative'),
+  price: z.number().min(0, 'Cannot be negative'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -36,38 +56,44 @@ export function InventoryForm({ initialValues, onSubmit, isLoading, submitLabel 
   });
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
     });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
+    if (!result.canceled && result.assets?.length > 0) {
       setImageUri(result.assets[0].uri);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.imageSection}>
-        <TouchableOpacity style={styles.imageContainer} onPress={pickImage}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.image} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <ImageIcon size={32} color="#94a3b8" />
-              <Text style={styles.imagePlaceholderText}>Add Image</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Image Picker */}
+      <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
+        {imageUri ? (
+          <>
+            <Image source={{ uri: imageUri }} style={styles.pickerImage} resizeMode="cover" />
+            <View style={styles.pickerOverlay}>
+              <Camera size={22} color="#fff" />
+              <Text style={styles.pickerOverlayText}>CHANGE PHOTO</Text>
             </View>
-          )}
-          <View style={styles.imageOverlay}>
-            <Camera size={20} color="#ffffff" />
+          </>
+        ) : (
+          <View style={styles.pickerEmpty}>
+            <Package size={36} color="#CCCCCC" strokeWidth={1.2} />
+            <Text style={styles.pickerEmptyText}>TAP TO ADD PHOTO</Text>
           </View>
-        </TouchableOpacity>
-      </View>
+        )}
+      </TouchableOpacity>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Name</Text>
+      {/* Name */}
+      <Field label="PRODUCT NAME" error={errors.name?.message}>
         <Controller
           control={control}
           name="name"
@@ -77,15 +103,16 @@ export function InventoryForm({ initialValues, onSubmit, isLoading, submitLabel 
               onBlur={onBlur}
               onChangeText={onChange}
               value={value}
-              placeholder="Item name"
+              placeholder="e.g. Wireless Headphones"
+              placeholderTextColor="#BDBDBD"
+              autoCorrect={false}
             />
           )}
         />
-        {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
-      </View>
+      </Field>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Description</Text>
+      {/* Description */}
+      <Field label="DESCRIPTION" error={errors.description?.message}>
         <Controller
           control={control}
           name="description"
@@ -95,172 +122,145 @@ export function InventoryForm({ initialValues, onSubmit, isLoading, submitLabel 
               onBlur={onBlur}
               onChangeText={onChange}
               value={value}
-              placeholder="Item description"
+              placeholder="Brief description of this product..."
+              placeholderTextColor="#BDBDBD"
               multiline
               numberOfLines={4}
+              textAlignVertical="top"
             />
           )}
         />
-        {errors.description && <Text style={styles.errorText}>{errors.description.message}</Text>}
+      </Field>
+
+      {/* Qty + Price */}
+      <View style={styles.twoCol}>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Field label="QUANTITY" error={errors.quantity?.message}>
+            <Controller
+              control={control}
+              name="quantity"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  style={[styles.input, errors.quantity && styles.inputError]}
+                  onBlur={onBlur}
+                  onChangeText={val => onChange(parseInt(val) || 0)}
+                  value={value.toString()}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor="#BDBDBD"
+                />
+              )}
+            />
+          </Field>
+        </View>
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Field label="PRICE ($)" error={errors.price?.message}>
+            <Controller
+              control={control}
+              name="price"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  style={[styles.input, errors.price && styles.inputError]}
+                  onBlur={onBlur}
+                  onChangeText={val => onChange(parseFloat(val) || 0)}
+                  value={value.toString()}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor="#BDBDBD"
+                />
+              )}
+            />
+          </Field>
+        </View>
       </View>
 
-      <View style={styles.row}>
-        <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-          <Text style={styles.label}>Quantity</Text>
-          <Controller
-            control={control}
-            name="quantity"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                style={[styles.input, errors.quantity && styles.inputError]}
-                onBlur={onBlur}
-                onChangeText={(val) => onChange(parseInt(val) || 0)}
-                value={value.toString()}
-                keyboardType="numeric"
-                placeholder="0"
-              />
-            )}
-          />
-          {errors.quantity && <Text style={styles.errorText}>{errors.quantity.message}</Text>}
-        </View>
-
-        <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.label}>Price ($)</Text>
-          <Controller
-            control={control}
-            name="price"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                style={[styles.input, errors.price && styles.inputError]}
-                onBlur={onBlur}
-                onChangeText={(val) => onChange(parseFloat(val) || 0)}
-                value={value.toString()}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-              />
-            )}
-          />
-          {errors.price && <Text style={styles.errorText}>{errors.price.message}</Text>}
-        </View>
-      </View>
-
-      <TouchableOpacity 
-        style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-        onPress={handleSubmit((data) => onSubmit(data, imageUri))}
+      {/* Submit */}
+      <TouchableOpacity
+        style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
+        onPress={handleSubmit(data => onSubmit(data, imageUri))}
         disabled={isLoading}
+        activeOpacity={0.85}
       >
         {isLoading ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.submitButtonText}>{submitLabel}</Text>
+          <Text style={styles.submitBtnText}>{submitLabel.toUpperCase()}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {children}
+      {error && <Text style={styles.fieldError}>{error}</Text>}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  imageSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  imageContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#f1f5f9',
+  container: { flex: 1, backgroundColor: C.bg },
+  content: { padding: 16, paddingBottom: 48 },
+  imagePicker: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
   },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  imagePlaceholder: {
-    alignItems: 'center',
-  },
-  imagePlaceholderText: {
-    marginTop: 8,
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    height: 36,
+  pickerImage: { width: '100%', height: '100%' },
+  pickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  formGroup: {
-    marginBottom: 20,
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
+  pickerOverlayText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
+  pickerEmpty: { alignItems: 'center', gap: 10 },
+  pickerEmptyText: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, color: '#CCCCCC' },
+  field: { marginBottom: 16 },
+  fieldLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: C.sub,
     marginBottom: 8,
   },
   input: {
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: C.border,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#0f172a',
-    backgroundColor: '#f8fafc',
+    paddingVertical: Platform.OS === 'ios' ? 14 : 11,
+    fontSize: 15,
+    color: C.text,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  inputError: {
-    borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  submitButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 12,
-    paddingVertical: 16,
+  textArea: { height: 100, textAlignVertical: 'top' },
+  inputError: { borderColor: C.red, backgroundColor: C.redLight },
+  fieldError: { color: C.red, fontSize: 11, marginTop: 5, fontWeight: '500' },
+  twoCol: { flexDirection: 'row' },
+  submitBtn: {
+    backgroundColor: C.text,
+    borderRadius: 14,
+    paddingVertical: 17,
     alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 12,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  submitButtonDisabled: {
-    backgroundColor: '#a5b4fc',
-    shadowOpacity: 0,
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
+  submitBtnDisabled: { backgroundColor: '#555' },
+  submitBtnText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 2,
   },
 });

@@ -1,67 +1,151 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  TextInput,
+  Platform,
+  Dimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useInventoryItems, InventoryItem } from '@/api/inventory';
-import { Plus } from 'lucide-react-native';
+import { Plus, Search, Package, X } from 'lucide-react-native';
 
-export default function InventoryListScreen() {
-  const router = useRouter();
-  const { data: items, isLoading, error } = useInventoryItems();
+const CARD_MARGIN = 12;
 
-  const renderItem = ({ item }: { item: InventoryItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.image} />
-      ) : (
-        <View style={styles.placeholderImage}>
-          <Text style={styles.placeholderText}>No Image</Text>
-        </View>
-      )}
-      <View style={styles.cardContent}>
-        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.itemQuantity}>Quantity: {item.quantity}</Text>
-        <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+const C = {
+  bg: '#F2F2F2',
+  card: '#FFFFFF',
+  text: '#0A0A0A',
+  sub: '#7A7A7A',
+  border: '#E5E5E5',
+  green: '#2D7A47',
+  greenLight: '#EBF5EE',
+  red: '#C0392B',
+  redLight: '#FCECEA',
+};
+
+function StockBadge({ quantity }: { quantity: number }) {
+  const outOfStock = quantity === 0;
+  return (
+    <View style={[styles.stockBadge, { backgroundColor: outOfStock ? C.redLight : C.greenLight }]}>
+      <Text style={[styles.stockBadgeText, { color: outOfStock ? C.red : C.green }]}>
+        {outOfStock ? 'OUT OF STOCK' : `${quantity} IN STOCK`}
+      </Text>
+    </View>
+  );
+}
+
+function ItemCard({ item, onPress }: { item: InventoryItem; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.cardImageWrap}>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.cardImagePlaceholder}>
+            <Package size={36} color="#CCCCCC" strokeWidth={1.5} />
+          </View>
+        )}
+      </View>
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardName} numberOfLines={2}>{item.name.toUpperCase()}</Text>
+        <StockBadge quantity={item.quantity} />
+        <Text style={styles.cardPrice}>${item.price.toFixed(2)}</Text>
       </View>
     </TouchableOpacity>
   );
+}
+
+export default function InventoryScreen() {
+  const router = useRouter();
+  const { data: items, isLoading, error, refetch } = useInventoryItems();
+  const [search, setSearch] = useState('');
+  const [searchVisible, setSearchVisible] = useState(false);
+
+  const filtered = useMemo(() => {
+    if (!items) return [];
+    if (!search.trim()) return items;
+    return items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  }, [items, search]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Inventory</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push('/create')}
-        >
-          <Plus size={24} color="#fff" />
-        </TouchableOpacity>
+        {searchVisible ? (
+          <View style={styles.searchBar}>
+            <Search size={16} color={C.sub} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              placeholderTextColor={C.sub}
+              value={search}
+              onChangeText={setSearch}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => { setSearch(''); setSearchVisible(false); }}>
+              <X size={16} color={C.sub} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity onPress={() => setSearchVisible(true)} activeOpacity={0.7}>
+              <Search size={22} color={C.text} strokeWidth={1.8} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>INVENTORY</Text>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => router.push('/create')}
+              activeOpacity={0.7}
+            >
+              <Plus size={22} color={C.text} strokeWidth={2} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
+      <View style={styles.divider} />
+
+      {/* Content */}
       {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#6366f1" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={C.text} />
         </View>
       ) : error ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Error loading items. Check connection.</Text>
+        <View style={styles.center}>
+          <Package size={52} color="#D0D0D0" strokeWidth={1.2} />
+          <Text style={styles.emptyTitle}>FAILED TO LOAD</Text>
+          <Text style={styles.emptySub}>Check your connection</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryText}>RETRY</Text>
+          </TouchableOpacity>
         </View>
-      ) : !items || items.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>No inventory items found.</Text>
-          <Text style={styles.emptySubText}>Tap the + button to add one.</Text>
+      ) : filtered.length === 0 ? (
+        <View style={styles.center}>
+          <Package size={52} color="#D0D0D0" strokeWidth={1.2} />
+          <Text style={styles.emptyTitle}>
+            {search ? 'NO RESULTS' : 'NO PRODUCTS'}
+          </Text>
+          <Text style={styles.emptySub}>
+            {search ? 'Try a different search term' : 'Tap + to add your first item'}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          data={filtered}
+          keyExtractor={i => i.id}
+          numColumns={1}
+          contentContainerStyle={styles.grid}
           showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <ItemCard item={item} onPress={() => router.push(`/${item.id}`)} />
+          )}
         />
       )}
     </SafeAreaView>
@@ -69,111 +153,137 @@ export default function InventoryListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: C.bg,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    paddingVertical: 14,
+    backgroundColor: C.bg,
   },
-  title: {
-    fontSize: 28,
+  headerTitle: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#0f172a',
-    letterSpacing: -0.5,
+    letterSpacing: 2.5,
+    color: C.text,
   },
-  addButton: {
-    backgroundColor: '#6366f1',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  addBtn: {
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  listContent: {
-    padding: 16,
-    gap: 16,
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.card,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: C.text,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.border,
+  },
+  grid: {
+    padding: 12,
+    paddingBottom: 32,
   },
   card: {
-    backgroundColor: '#ffffff',
+    width: '100%',
+    backgroundColor: C.card,
     borderRadius: 16,
+    marginBottom: CARD_MARGIN,
     overflow: 'hidden',
-    flexDirection: 'row',
-    shadowColor: '#64748b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: C.border,
   },
-  image: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#f1f5f9',
+  cardImageWrap: {
+    width: '100%',
+    aspectRatio: 1.5,
+    backgroundColor: '#F8F8F8',
   },
-  placeholderImage: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#f1f5f9',
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardImagePlaceholder: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '500',
+  cardInfo: {
+    padding: 12,
   },
-  cardContent: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'center',
-  },
-  itemName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  itemQuantity: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 6,
-  },
-  itemPrice: {
-    fontSize: 16,
+  cardName: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#10b981',
+    letterSpacing: 0.8,
+    color: C.text,
+    marginBottom: 8,
+    lineHeight: 16,
   },
-  centerContainer: {
+  stockBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginBottom: 7,
+  },
+  stockBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  cardPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.text,
+    letterSpacing: -0.3,
+  },
+  center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    gap: 8,
+    padding: 32,
   },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: C.text,
+    marginTop: 12,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: C.sub,
     textAlign: 'center',
   },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 8,
+  retryBtn: {
+    marginTop: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: C.text,
+    borderRadius: 10,
   },
-  emptySubText: {
-    fontSize: 15,
-    color: '#94a3b8',
+  retryText: {
+    color: '#fff',
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    fontSize: 12,
   },
 });
