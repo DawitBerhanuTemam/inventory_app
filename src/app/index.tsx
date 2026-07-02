@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useInventoryItems, InventoryItem } from '@/api/inventory';
-import { Plus, Search, Package, X } from 'lucide-react-native';
+import { Plus, Search, Package, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
+const { width } = Dimensions.get('window');
 const CARD_MARGIN = 12;
+const CARD_SIZE = (width - 48) / 2;
+const ITEMS_PER_PAGE = 6;
 
 const C = {
   bg: '#F2F2F2',
@@ -67,12 +70,23 @@ export default function InventoryScreen() {
   const { data: items, isLoading, error, refetch } = useInventoryItems();
   const [search, setSearch] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filtered = useMemo(() => {
     if (!items) return [];
     if (!search.trim()) return items;
     return items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
   }, [items, search]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const paginatedItems = filtered.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -137,16 +151,40 @@ export default function InventoryScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={i => i.id}
-          numColumns={1}
-          contentContainerStyle={styles.grid}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <ItemCard item={item} onPress={() => router.push(`/${item.id}`)} />
+        <View style={{ flex: 1 }}>
+          <FlatList
+            data={paginatedItems}
+            keyExtractor={i => i.id}
+            numColumns={2}
+            contentContainerStyle={styles.grid}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <ItemCard item={item} onPress={() => router.push(`/${item.id}`)} />
+            )}
+          />
+          {totalPages > 1 && (
+            <View style={styles.pagination}>
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                disabled={currentPage === 1}
+                onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={16} color={C.text} strokeWidth={2} />
+              </TouchableOpacity>
+              <Text style={styles.pageText}>
+                {currentPage} / {totalPages}
+              </Text>
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                disabled={currentPage === totalPages}
+                onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight size={16} color={C.text} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
           )}
-        />
+        </View>
       )}
     </SafeAreaView>
   );
@@ -201,8 +239,11 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingBottom: 32,
   },
+  row: {
+    justifyContent: 'space-between',
+  },
   card: {
-    width: '100%',
+    width: '48%',
     backgroundColor: C.card,
     borderRadius: 16,
     marginBottom: CARD_MARGIN,
@@ -212,7 +253,7 @@ const styles = StyleSheet.create({
   },
   cardImageWrap: {
     width: '100%',
-    aspectRatio: 1.5,
+    aspectRatio: 1.15,
     backgroundColor: '#F8F8F8',
   },
   cardImage: {
@@ -285,5 +326,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.5,
     fontSize: 12,
+  },
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingBottom: 20,
+    backgroundColor: C.bg,
+  },
+  pageBtn: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  pageBtnDisabled: {
+    opacity: 0.2,
+  },
+  pageText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: C.sub,
   },
 });
