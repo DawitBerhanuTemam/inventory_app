@@ -1,18 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
-export type InventoryItem = {
-  id: string;
-  name: string;
-  description: string;
-  quantity: number;
-  price: number;
-  image_url: string | null;
-  created_at: string;
-};
+// Re-export all types from the dedicated types module.
+// This preserves backward compatibility for any imports from '@/api/inventory'.
+export type {
+  InventoryItem,
+  CreateInventoryItemInput,
+  UpdateInventoryItemInput,
+  InventoryFormValues,
+} from '@/types/inventory';
 
-export type CreateInventoryItemInput = Omit<InventoryItem, 'id' | 'created_at'>;
+import type { InventoryItem, CreateInventoryItemInput, UpdateInventoryItemInput } from '@/types/inventory';
 
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+/** Fetches the full list of inventory items, ordered by creation date. */
 export const useInventoryItems = () => {
   return useQuery({
     queryKey: ['inventory'],
@@ -31,6 +35,7 @@ export const useInventoryItems = () => {
   });
 };
 
+/** Fetches a single inventory item by ID. */
 export const useInventoryItem = (id: string) => {
   return useQuery({
     queryKey: ['inventory', id],
@@ -51,6 +56,7 @@ export const useInventoryItem = (id: string) => {
   });
 };
 
+/** Creates a new inventory item and invalidates the inventory list cache. */
 export const useCreateItem = () => {
   const queryClient = useQueryClient();
 
@@ -65,7 +71,7 @@ export const useCreateItem = () => {
       if (error) {
         throw new Error(error.message);
       }
-      return data;
+      return data as InventoryItem;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -73,11 +79,18 @@ export const useCreateItem = () => {
   });
 };
 
+/** Updates an existing inventory item and invalidates relevant caches. */
 export const useUpdateItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<CreateInventoryItemInput> }) => {
+    mutationFn: async ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: UpdateInventoryItemInput;
+    }) => {
       const { data, error } = await supabase
         .from('inventory')
         .update(updates)
@@ -88,15 +101,16 @@ export const useUpdateItem = () => {
       if (error) {
         throw new Error(error.message);
       }
-      return data;
+      return data as InventoryItem;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory', variables.id] });
     },
   });
 };
 
+/** Deletes an inventory item by ID and invalidates the inventory list cache. */
 export const useDeleteItem = () => {
   const queryClient = useQueryClient();
 

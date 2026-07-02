@@ -1,35 +1,36 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { InventoryForm } from '@/components/InventoryForm';
+import { NavHeader } from '@/components/ui/NavHeader';
 import { useCreateItem } from '@/api/inventory';
 import { uploadImage } from '@/api/upload';
-import { ArrowLeft } from 'lucide-react-native';
+import { AppColors } from '@/constants/colors';
+import type { InventoryFormValues } from '@/types/inventory';
 
-const C = {
-  bg: '#F2F2F2',
-  card: '#FFFFFF',
-  text: '#0A0A0A',
-  sub: '#7A7A7A',
-  border: '#E5E5E5',
-};
-
+/**
+ * Screen for creating a new inventory item.
+ * Handles image upload and delegates form rendering to InventoryForm.
+ */
 export default function CreateItemScreen() {
   const router = useRouter();
-  const goBack = () => router.canGoBack() ? router.back() : router.replace('/');
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
   const createMutation = useCreateItem();
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleSubmit = async (data: any, imageUri: string | null) => {
+  const handleSubmit = async (values: InventoryFormValues, imageUri: string) => {
     try {
       setIsUploading(true);
-      let imageUrl = null;
-      if (imageUri) imageUrl = await uploadImage(imageUri);
-      await createMutation.mutateAsync({ ...data, image_url: imageUrl });
+
+      const imageUrl = await uploadImage(imageUri);
+
+      await createMutation.mutateAsync({ ...values, image_url: imageUrl });
       goBack();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create item');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to create item.';
+      Alert.alert('Error', message);
     } finally {
       setIsUploading(false);
     }
@@ -37,14 +38,7 @@ export default function CreateItemScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => goBack()} activeOpacity={0.7}>
-          <ArrowLeft size={20} color={C.text} strokeWidth={1.8} />
-        </TouchableOpacity>
-        <Text style={styles.title}>ADD PRODUCT</Text>
-        <View style={{ width: 36 }} />
-      </View>
-      <View style={styles.divider} />
+      <NavHeader title="ADD PRODUCT" onBack={goBack} />
       <InventoryForm
         onSubmit={handleSubmit}
         isLoading={isUploading || createMutation.isPending}
@@ -55,29 +49,8 @@ export default function CreateItemScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  root: {
+    flex: 1,
+    backgroundColor: AppColors.background,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2.5,
-    color: C.text,
-  },
-  divider: { height: 1, backgroundColor: C.border },
 });

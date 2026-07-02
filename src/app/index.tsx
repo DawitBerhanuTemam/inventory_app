@@ -4,50 +4,39 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   Image,
-  ActivityIndicator,
   TextInput,
   Platform,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useInventoryItems, InventoryItem } from '@/api/inventory';
-import { Plus, Search, Package, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { useInventoryItems } from '@/api/inventory';
+import type { InventoryItem } from '@/types/inventory';
+import { AppColors } from '@/constants/colors';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { ErrorView } from '@/components/ui/ErrorView';
+import { EmptyView } from '@/components/ui/EmptyView';
+import { Plus, Search, Package, X, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react-native';
 
-const { width } = Dimensions.get('window');
-const CARD_MARGIN = 12;
-const CARD_SIZE = (width - 48) / 2;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 const ITEMS_PER_PAGE = 6;
 
-const C = {
-  bg: '#F2F2F2',
-  card: '#FFFFFF',
-  text: '#0A0A0A',
-  sub: '#7A7A7A',
-  border: '#E5E5E5',
-  green: '#2D7A47',
-  greenLight: '#EBF5EE',
-  red: '#C0392B',
-  redLight: '#FCECEA',
-};
-
-function StockBadge({ quantity }: { quantity: number }) {
-  const outOfStock = quantity === 0;
-  return (
-    <View style={[styles.stockBadge, { backgroundColor: outOfStock ? C.redLight : C.greenLight }]}>
-      <Text style={[styles.stockBadgeText, { color: outOfStock ? C.red : C.green }]}>
-        {outOfStock ? 'OUT OF STOCK' : `${quantity} IN STOCK`}
-      </Text>
-    </View>
-  );
+interface ItemCardProps {
+  item: InventoryItem;
+  onPress: () => void;
 }
 
-function ItemCard({ item, onPress }: { item: InventoryItem; onPress: () => void }) {
+function ItemCard({ item, onPress }: ItemCardProps) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.cardImageWrap}>
+    <Pressable
+      style={({ pressed }) => [styles.card, { opacity: pressed ? 0.85 : 1 }]}
+      onPress={onPress}
+      accessibilityLabel={`View ${item.name}`}
+      accessibilityRole="button"
+    >
+      <View style={styles.cardImageContainer}>
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
         ) : (
@@ -55,71 +44,129 @@ function ItemCard({ item, onPress }: { item: InventoryItem; onPress: () => void 
             <Package size={36} color="#CCCCCC" strokeWidth={1.5} />
           </View>
         )}
+        <View style={styles.cardAddButton}>
+          <Plus size={18} color="#000" strokeWidth={2.5} />
+        </View>
       </View>
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardName} numberOfLines={2}>{item.name.toUpperCase()}</Text>
-        <StockBadge quantity={item.quantity} />
+
+      <View style={styles.cardBody}>
+        <Text style={styles.cardName} numberOfLines={2}>
+          {item.name}
+        </Text>
         <Text style={styles.cardPrice}>${item.price.toFixed(2)}</Text>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 export default function InventoryScreen() {
   const router = useRouter();
   const { data: items, isLoading, error, refetch } = useInventoryItems();
-  const [search, setSearch] = useState('');
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    if (!items) return [];
-    if (!search.trim()) return items;
-    return items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
-  }, [items, search]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginatedItems = filtered.slice(
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) => item.name.toLowerCase().includes(query));
+  }, [items, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
+  const paginatedItems = filteredItems.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  const handleCloseSearch = () => {
+    setSearchQuery('');
+    setIsSearchVisible(false);
+  };
+
+  const handleTouchStart = (e: any) => {
+    setTouchStart({
+      x: e.nativeEvent.pageX,
+      y: e.nativeEvent.pageY,
+    });
+  };
+
+  const handleTouchEnd = (e: any) => {
+    if (!touchStart) return;
+
+    const diffX = e.nativeEvent.pageX - touchStart.x;
+    const diffY = e.nativeEvent.pageY - touchStart.y;
+
+    // Trigger swipe if horizontal movement is larger than vertical movement,
+    // and horizontal movement exceeds a threshold (e.g. 50 pixels)
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      if (diffX > 0) {
+        // Swiped right -> go to previous page
+        if (currentPage > 1) {
+          setCurrentPage((page) => page - 1);
+        }
+      } else {
+        // Swiped left -> go to next page
+        if (currentPage < totalPages) {
+          setCurrentPage((page) => page + 1);
+        }
+      }
+    }
+    setTouchStart(null);
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        {searchVisible ? (
+        {isSearchVisible ? (
           <View style={styles.searchBar}>
-            <Search size={16} color={C.sub} style={{ marginRight: 8 }} />
+            <Search size={16} color={AppColors.textSecondary} style={{ marginRight: 8 }} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search products..."
-              placeholderTextColor={C.sub}
-              value={search}
-              onChangeText={setSearch}
+              placeholderTextColor={AppColors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
               autoFocus
+              accessibilityLabel="Search products"
             />
-            <TouchableOpacity onPress={() => { setSearch(''); setSearchVisible(false); }}>
-              <X size={16} color={C.sub} />
-            </TouchableOpacity>
+            <Pressable
+              onPress={handleCloseSearch}
+              accessibilityLabel="Clear search"
+              accessibilityRole="button"
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <X size={16} color={AppColors.textSecondary} />
+            </Pressable>
           </View>
         ) : (
           <>
-            <TouchableOpacity onPress={() => setSearchVisible(true)} activeOpacity={0.7}>
-              <Search size={22} color={C.text} strokeWidth={1.8} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>INVENTORY</Text>
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => router.push('/create')}
-              activeOpacity={0.7}
+            <Pressable
+              onPress={() => setIsSearchVisible(true)}
+              accessibilityLabel="Open search"
+              accessibilityRole="button"
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
             >
-              <Plus size={22} color={C.text} strokeWidth={2} />
-            </TouchableOpacity>
+              <Search size={22} color={AppColors.text} strokeWidth={1.8} />
+            </Pressable>
+
+            <Text style={styles.headerTitle}>INVENTORY</Text>
+
+            <Pressable
+              style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => router.push('/create')}
+              accessibilityLabel="Add new item"
+              accessibilityRole="button"
+            >
+              <Plus size={22} color={AppColors.text} strokeWidth={2} />
+            </Pressable>
           </>
         )}
       </View>
@@ -128,60 +175,77 @@ export default function InventoryScreen() {
 
       {/* Content */}
       {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={C.text} />
-        </View>
+        <LoadingView />
       ) : error ? (
-        <View style={styles.center}>
-          <Package size={52} color="#D0D0D0" strokeWidth={1.2} />
-          <Text style={styles.emptyTitle}>FAILED TO LOAD</Text>
-          <Text style={styles.emptySub}>Check your connection</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>RETRY</Text>
-          </TouchableOpacity>
-        </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.center}>
-          <Package size={52} color="#D0D0D0" strokeWidth={1.2} />
-          <Text style={styles.emptyTitle}>
-            {search ? 'NO RESULTS' : 'NO PRODUCTS'}
-          </Text>
-          <Text style={styles.emptySub}>
-            {search ? 'Try a different search term' : 'Tap + to add your first item'}
-          </Text>
-        </View>
+        <ErrorView
+          message="Check your connection and try again."
+          onRetry={refetch}
+        />
+      ) : filteredItems.length === 0 ? (
+        <EmptyView
+          title={searchQuery ? 'NO RESULTS' : 'NO PRODUCTS'}
+          subtitle={
+            searchQuery
+              ? 'Try a different search term.'
+              : 'Tap + to add your first item.'
+          }
+        />
       ) : (
-        <View style={{ flex: 1 }}>
+        <View 
+          style={styles.listContainer}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <FlatList
             data={paginatedItems}
-            keyExtractor={i => i.id}
+            keyExtractor={(item) => item.id}
             numColumns={2}
             contentContainerStyle={styles.grid}
-            columnWrapperStyle={styles.row}
+            columnWrapperStyle={styles.gridRow}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <ItemCard item={item} onPress={() => router.push(`/${item.id}`)} />
+              <ItemCard
+                item={item}
+                onPress={() => router.push(`/${item.id}`)}
+              />
             )}
           />
+
           {totalPages > 1 && (
             <View style={styles.pagination}>
-              <TouchableOpacity
-                style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.pageButton,
+                  currentPage === 1 && styles.pageButtonDisabled,
+                  { opacity: pressed && currentPage !== 1 ? 0.6 : 1 },
+                ]}
                 disabled={currentPage === 1}
-                onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                onPress={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                accessibilityLabel="Previous page"
+                accessibilityRole="button"
               >
-                <ChevronLeft size={16} color={C.text} strokeWidth={2} />
-              </TouchableOpacity>
-              <Text style={styles.pageText}>
+                <ChevronLeft size={16} color={AppColors.text} strokeWidth={2} />
+              </Pressable>
+
+              <Text style={styles.pageIndicator}>
                 {currentPage} / {totalPages}
               </Text>
-              <TouchableOpacity
-                style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.pageButton,
+                  currentPage === totalPages && styles.pageButtonDisabled,
+                  { opacity: pressed && currentPage !== totalPages ? 0.6 : 1 },
+                ]}
                 disabled={currentPage === totalPages}
-                onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                onPress={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                accessibilityLabel="Next page"
+                accessibilityRole="button"
               >
-                <ChevronRight size={16} color={C.text} strokeWidth={2} />
-              </TouchableOpacity>
+                <ChevronRight size={16} color={AppColors.text} strokeWidth={2} />
+              </Pressable>
             </View>
           )}
         </View>
@@ -193,7 +257,7 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.bg,
+    backgroundColor: AppColors.background,
   },
   header: {
     flexDirection: 'row',
@@ -201,15 +265,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: C.bg,
+    backgroundColor: AppColors.background,
   },
   headerTitle: {
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 2.5,
-    color: C.text,
+    color: AppColors.text,
   },
-  addBtn: {
+  addButton: {
     width: 36,
     height: 36,
     justifyContent: 'center',
@@ -219,42 +283,45 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.card,
+    backgroundColor: AppColors.card,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 10 : 6,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: AppColors.border,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: C.text,
+    color: AppColors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: C.border,
+    backgroundColor: AppColors.border,
+  },
+  listContainer: {
+    flex: 1,
   },
   grid: {
     padding: 12,
     paddingBottom: 32,
   },
-  row: {
+  gridRow: {
     justifyContent: 'space-between',
   },
   card: {
-    width: '48%',
-    backgroundColor: C.card,
-    borderRadius: 16,
-    marginBottom: CARD_MARGIN,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: C.border,
+    width: (SCREEN_WIDTH - 48) / 2,
+    marginBottom: 24,
   },
-  cardImageWrap: {
+  cardImageContainer: {
     width: '100%',
-    aspectRatio: 1.15,
-    backgroundColor: '#F8F8F8',
+    aspectRatio: 0.85,
+    backgroundColor: '#F5F5F7',
+    borderRadius: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   cardImage: {
     width: '100%',
@@ -266,66 +333,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cardInfo: {
-    padding: 12,
+  cardAddButton: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardBody: {
+    paddingTop: 12,
+    paddingHorizontal: 4,
   },
   cardName: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    color: C.text,
-    marginBottom: 8,
-    lineHeight: 16,
-  },
-  stockBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    marginBottom: 7,
-  },
-  stockBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 15,
+    fontWeight: '600',
+    color: AppColors.text,
+    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   cardPrice: {
     fontSize: 15,
-    fontWeight: '700',
-    color: C.text,
-    letterSpacing: -0.3,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-    color: C.text,
-    marginTop: 12,
-  },
-  emptySub: {
-    fontSize: 13,
-    color: C.sub,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    marginTop: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: C.text,
-    borderRadius: 10,
-  },
-  retryText: {
-    color: '#fff',
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    fontSize: 12,
+    fontWeight: '500',
+    color: AppColors.textSecondary,
+    letterSpacing: -0.2,
   },
   pagination: {
     flexDirection: 'row',
@@ -333,21 +372,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingBottom: 20,
-    backgroundColor: C.bg,
+    backgroundColor: AppColors.background,
   },
-  pageBtn: {
+  pageButton: {
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 12,
   },
-  pageBtnDisabled: {
+  pageButtonDisabled: {
     opacity: 0.2,
   },
-  pageText: {
+  pageIndicator: {
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.5,
-    color: C.sub,
+    color: AppColors.textSecondary,
   },
 });

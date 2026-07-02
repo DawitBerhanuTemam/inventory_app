@@ -1,47 +1,50 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { InventoryForm } from '@/components/InventoryForm';
+import { NavHeader } from '@/components/ui/NavHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { ErrorView } from '@/components/ui/ErrorView';
 import { useInventoryItem, useUpdateItem } from '@/api/inventory';
 import { uploadImage } from '@/api/upload';
-import { ArrowLeft } from 'lucide-react-native';
+import { AppColors } from '@/constants/colors';
+import type { InventoryFormValues } from '@/types/inventory';
 
-const C = {
-  bg: '#F2F2F2',
-  card: '#FFFFFF',
-  text: '#0A0A0A',
-  sub: '#7A7A7A',
-  border: '#E5E5E5',
-  red: '#C0392B',
-};
-
+/**
+ * Screen for editing an existing inventory item.
+ * Fetches the current item data, pre-populates the form, and handles updates.
+ */
 export default function EditItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const goBack = () => router.canGoBack() ? router.back() : router.replace('/');
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
   const { data: item, isLoading: isFetching, error } = useInventoryItem(id as string);
   const updateMutation = useUpdateItem();
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleSubmit = async (data: any, imageUri: string | null) => {
+  const handleSubmit = async (values: InventoryFormValues, imageUri: string) => {
     try {
       setIsUploading(true);
-      let imageUrl = item?.image_url;
+
+      // Only re-upload if a new local image was picked (not an existing http URL)
+      let imageUrl = item?.image_url ?? null;
       if (imageUri && !imageUri.startsWith('http')) {
         imageUrl = await uploadImage(imageUri);
+      } else if (imageUri) {
+        imageUrl = imageUri;
       }
-      await updateMutation.mutateAsync({ id: id as string, updates: { ...data, image_url: imageUrl } });
+
+      await updateMutation.mutateAsync({
+        id: id as string,
+        updates: { ...values, image_url: imageUrl },
+      });
+
       goBack();
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update item');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update item.';
+      Alert.alert('Error', message);
     } finally {
       setIsUploading(false);
     }
@@ -49,23 +52,12 @@ export default function EditItemScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => goBack()} activeOpacity={0.7}>
-          <ArrowLeft size={20} color={C.text} strokeWidth={1.8} />
-        </TouchableOpacity>
-        <Text style={styles.title}>EDIT PRODUCT</Text>
-        <View style={{ width: 36 }} />
-      </View>
-      <View style={styles.divider} />
+      <NavHeader title="EDIT PRODUCT" onBack={goBack} />
 
       {isFetching ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={C.text} />
-        </View>
+        <LoadingView />
       ) : error || !item ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Failed to load item.</Text>
-        </View>
+        <ErrorView message="Failed to load this item." />
       ) : (
         <InventoryForm
           initialValues={item}
@@ -79,31 +71,8 @@ export default function EditItemScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  root: {
+    flex: 1,
+    backgroundColor: AppColors.background,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2.5,
-    color: C.text,
-  },
-  divider: { height: 1, backgroundColor: C.border },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 14, color: C.red },
 });

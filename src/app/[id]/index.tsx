@@ -1,50 +1,27 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, ScrollView, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInventoryItem, useDeleteItem } from '@/api/inventory';
-import { ArrowLeft, Edit2, Trash2, Package } from 'lucide-react-native';
+import { AppColors } from '@/constants/colors';
+import { NavHeader } from '@/components/ui/NavHeader';
+import { StockBadge } from '@/components/ui/StockBadge';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { ErrorView } from '@/components/ui/ErrorView';
+import { Edit2, Trash2, Package } from 'lucide-react-native';
 
-const C = {
-  bg: '#F2F2F2',
-  card: '#FFFFFF',
-  text: '#0A0A0A',
-  sub: '#7A7A7A',
-  border: '#E5E5E5',
-  green: '#2D7A47',
-  greenLight: '#EBF5EE',
-  red: '#C0392B',
-  redLight: '#FCECEA',
-};
-
-function StockBadge({ quantity }: { quantity: number }) {
-  const outOfStock = quantity === 0;
-  const lowStock = quantity > 0 && quantity < 5;
-  const bg = outOfStock ? C.redLight : lowStock ? '#FEF3C7' : C.greenLight;
-  const color = outOfStock ? C.red : lowStock ? '#B45309' : C.green;
-  const label = outOfStock ? 'OUT OF STOCK' : lowStock ? 'LOW STOCK' : 'IN STOCK';
-  return (
-    <View style={[styles.badge, { backgroundColor: bg }]}>
-      <Text style={[styles.badgeText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
+/**
+ * Detail screen showing all fields for a single inventory item,
+ * with actions to navigate to the edit screen or delete the item.
+ */
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const goBack = () => router.canGoBack() ? router.back() : router.replace('/');
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
   const { data: item, isLoading, error } = useInventoryItem(id as string);
   const deleteMutation = useDeleteItem();
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleDelete = () => {
     Alert.alert(
@@ -59,8 +36,9 @@ export default function ItemDetailScreen() {
             try {
               await deleteMutation.mutateAsync(id as string);
               goBack();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete item');
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Failed to delete item.';
+              Alert.alert('Error', message);
             }
           },
         },
@@ -71,8 +49,8 @@ export default function ItemDetailScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <NavHeader title="PRODUCT" onBack={() => goBack()} />
-        <View style={styles.center}><ActivityIndicator size="large" color={C.text} /></View>
+        <NavHeader title="PRODUCT" onBack={goBack} />
+        <LoadingView />
       </SafeAreaView>
     );
   }
@@ -80,26 +58,25 @@ export default function ItemDetailScreen() {
   if (error || !item) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <NavHeader title="PRODUCT" onBack={() => goBack()} />
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Failed to load.</Text>
-        </View>
+        <NavHeader title="PRODUCT" onBack={goBack} />
+        <ErrorView message="Failed to load this item." />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <NavHeader
-        title="PRODUCT"
-        onBack={() => goBack()}
-      />
+      <NavHeader title="PRODUCT" onBack={goBack} />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Large Product Image */}
+        {/* Product image */}
         <View style={styles.imageCard}>
           {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.productImage} resizeMode="cover" />
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
           ) : (
             <View style={styles.imagePlaceholder}>
               <Package size={72} color="#D5D5D5" strokeWidth={1} />
@@ -107,19 +84,17 @@ export default function ItemDetailScreen() {
           )}
         </View>
 
-        {/* Details Section */}
+        {/* Details card */}
         <View style={styles.detailCard}>
-          {/* Name */}
           <Text style={styles.productName}>{item.name.toUpperCase()}</Text>
 
-          {/* Badges */}
           <View style={styles.badgeRow}>
             <StockBadge quantity={item.quantity} />
           </View>
 
           <View style={styles.hairline} />
 
-          {/* Stats Row */}
+          {/* Stats row */}
           <View style={styles.statsRow}>
             <View style={styles.statBlock}>
               <Text style={styles.statLabel}>QUANTITY</Text>
@@ -130,115 +105,84 @@ export default function ItemDetailScreen() {
               <Text style={styles.statLabel}>UNIT PRICE</Text>
               <Text style={styles.statValue}>${item.price.toFixed(2)}</Text>
             </View>
-
           </View>
 
           <View style={styles.hairline} />
 
           {/* Description */}
-          <View style={styles.descSection}>
+          <View style={styles.descriptionSection}>
             <Text style={styles.sectionLabel}>DESCRIPTION</Text>
-            <Text style={styles.descText}>
-              {item.description || 'No description provided.'}
+            <Text style={styles.descriptionText}>
+              {isExpanded
+                ? (item.description || 'No description provided.')
+                : (item.description
+                    ? (item.description.length > 150
+                        ? `${item.description.slice(0, 150)}...`
+                        : item.description)
+                    : 'No description provided.')}
             </Text>
+            {item.description && item.description.length > 150 && (
+              <Pressable
+                onPress={() => setIsExpanded(!isExpanded)}
+                style={({ pressed }) => [styles.readMoreButton, { opacity: pressed ? 0.6 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? "Read less description" : "Read more description"}
+              >
+                <Text style={styles.readMoreText}>
+                  {isExpanded ? 'Read Less' : 'Read More'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.editBtn}
+        {/* Action buttons */}
+        <View style={styles.actionsRow}>
+          <Pressable
+            style={({ pressed }) => [styles.editButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={() => router.push(`/${id}/edit`)}
-            activeOpacity={0.85}
+            accessibilityLabel="Edit item"
+            accessibilityRole="button"
           >
-            <Edit2 size={16} color={C.text} strokeWidth={1.8} />
-            <Text style={styles.editBtnText}>EDIT ITEM</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteBtn}
+            <Edit2 size={16} color={AppColors.text} strokeWidth={1.8} />
+            <Text style={styles.editButtonText}>EDIT ITEM</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.deleteButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={handleDelete}
-            activeOpacity={0.85}
+            accessibilityLabel="Delete item"
+            accessibilityRole="button"
           >
             <Trash2 size={16} color="#fff" strokeWidth={1.8} />
-            <Text style={styles.deleteBtnText}>DELETE</Text>
-          </TouchableOpacity>
+            <Text style={styles.deleteButtonText}>DELETE</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function NavHeader({
-  title,
-  onBack,
-  right,
-}: {
-  title: string;
-  onBack: () => void;
-  right?: React.ReactNode;
-}) {
-  return (
-    <>
-      <View style={styles.navHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
-          <ArrowLeft size={20} color={C.text} strokeWidth={1.8} />
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>{title}</Text>
-        <View style={styles.navRight}>{right ?? <View style={{ width: 36 }} />}</View>
-      </View>
-      <View style={styles.hairline} />
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  navHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  root: {
+    flex: 1,
+    backgroundColor: AppColors.background,
   },
-  navTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2.5,
-    color: C.text,
+  scroll: {
+    flex: 1,
   },
-  navRight: { flexDirection: 'row', gap: 8 },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerRight: { flexDirection: 'row', gap: 8 },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  hairline: { height: 1, backgroundColor: C.border },
-  scroll: { flex: 1 },
   imageCard: {
     margin: 12,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: C.card,
+    backgroundColor: AppColors.card,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: AppColors.border,
   },
-  productImage: { width: '100%', height: 300 },
+  productImage: {
+    width: '100%',
+    height: 300,
+  },
   imagePlaceholder: {
     width: '100%',
     height: 300,
@@ -249,17 +193,17 @@ const styles = StyleSheet.create({
   detailCard: {
     marginHorizontal: 12,
     marginBottom: 12,
-    backgroundColor: C.card,
+    backgroundColor: AppColors.card,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: AppColors.border,
     overflow: 'hidden',
   },
   productName: {
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 1.5,
-    color: C.text,
+    color: AppColors.text,
     padding: 20,
     paddingBottom: 12,
   },
@@ -269,15 +213,9 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 8,
   },
-  badge: {
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+  hairline: {
+    height: 1,
+    backgroundColor: AppColors.border,
   },
   statsRow: {
     flexDirection: 'row',
@@ -290,76 +228,84 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    backgroundColor: C.border,
+    backgroundColor: AppColors.border,
   },
   statLabel: {
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1,
-    color: C.sub,
+    color: AppColors.textSecondary,
     marginBottom: 6,
   },
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: C.text,
+    color: AppColors.text,
     letterSpacing: -0.5,
   },
-  descSection: {
+  descriptionSection: {
     padding: 20,
   },
   sectionLabel: {
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.5,
-    color: C.sub,
+    color: AppColors.textSecondary,
     marginBottom: 8,
   },
-  descText: {
+  descriptionText: {
     fontSize: 14,
-    color: C.sub,
+    color: AppColors.textSecondary,
     lineHeight: 22,
   },
-  actions: {
+  actionsRow: {
     flexDirection: 'row',
     marginHorizontal: 12,
     marginBottom: 32,
     gap: 10,
   },
-  editBtn: {
+  editButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: C.card,
+    backgroundColor: AppColors.card,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: AppColors.border,
     borderRadius: 14,
     paddingVertical: 16,
   },
-  editBtnText: {
+  editButtonText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.5,
-    color: C.text,
+    color: AppColors.text,
   },
-  deleteBtn: {
+  deleteButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: C.text,
+    backgroundColor: AppColors.text,
     borderRadius: 14,
     paddingVertical: 16,
   },
-  deleteBtnText: {
+  deleteButtonText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.5,
     color: '#fff',
   },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 14, color: C.red },
+  readMoreButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  readMoreText: {
+    color: AppColors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
 });
